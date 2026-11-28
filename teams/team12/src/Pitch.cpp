@@ -11,6 +11,9 @@ constexpr float lineWidth = 0.13f;
 constexpr float markingY = 0.035f;
 constexpr float postWidth = 0.12f;
 constexpr glm::vec3 white{0.97f, 0.97f, 0.94f};
+constexpr float dugoutHalfLength = 7.4f;
+constexpr float dugoutOffset = 9.6f;
+constexpr float technicalHalfLength = dugoutHalfLength + 0.45f;
 
 void rectangle(Mesh& mesh, float xMin, float xMax, float zMin, float zMax, float y) {
     addQuad(mesh, {xMin, y, zMax}, {xMax, y, zMax}, {xMax, y, zMin}, {xMin, y, zMin});
@@ -22,6 +25,68 @@ void crossField(Mesh& mesh, float x, float zMin, float zMax) {
 
 void alongField(Mesh& mesh, float z, float xMin, float xMax) {
     rectangle(mesh, xMin, xMax, z - lineWidth * 0.5f, z + lineWidth * 0.5f, markingY);
+}
+
+void markTechnicalAreas(Mesh& mesh, float touchline, float scale) {
+    constexpr float dash = 0.46f;
+    constexpr float spacing = 0.78f;
+    const float front = touchline - 0.95f * scale;
+    for (const float sign : {-1.0f, 1.0f}) {
+        const float center = sign * dugoutOffset;
+        const float edge = technicalHalfLength;
+        for (float x = -edge; x < edge; x += spacing) {
+            alongField(mesh, front, (center + x) * scale,
+                       (center + std::min(x + dash, edge)) * scale);
+        }
+        for (const float side : {-edge, edge}) {
+            for (float depth = 0.0f; depth < 2.1f; depth += spacing) {
+                crossField(mesh, (center + side) * scale, front - (depth + dash) * scale,
+                           front - depth * scale);
+            }
+        }
+    }
+}
+
+void drawDugout() {
+    constexpr float h = dugoutHalfLength;
+    constexpr glm::vec3 frame{0.16f, 0.18f, 0.21f};
+    constexpr glm::vec3 canopy{0.37f, 0.41f, 0.46f};
+    constexpr glm::vec3 red{0.71f, 0.035f, 0.09f};
+    constexpr glm::vec3 coachRed{0.89f, 0.08f, 0.15f};
+    drawBox({0.0f, 0.06f, -0.82f}, {2.0f * h, 0.12f, 2.12f}, {0.31f, 0.32f, 0.33f});
+    drawBox({0.0f, 0.83f, -1.82f}, {2.0f * h, 1.42f, 0.14f}, frame);
+
+    // An open front keeps the seats and the coaches' view of the field clear.
+    constexpr glm::vec2 profile[] = {{0.34f, 1.99f}, {0.04f, 2.14f}, {-1.25f, 2.14f},
+                                     {-1.66f, 1.98f}, {-1.89f, 1.54f}};
+    Mesh shell;
+    for (int i = 0; i < 4; ++i) {
+        const auto a = profile[i];
+        const auto b = profile[i + 1];
+        addQuad(shell, {-h,a.y,a.x}, {h,a.y,a.x}, {h,b.y,b.x}, {-h,b.y,b.x});
+        addQuad(shell, {-h,b.y - 0.07f,b.x}, {h,b.y - 0.07f,b.x},
+                {h,a.y - 0.07f,a.x}, {-h,a.y - 0.07f,a.x});
+    }
+    drawMesh(shell, canopy);
+    drawBox({0.0f, 1.96f, 0.32f}, {2.0f * h, 0.12f, 0.10f}, frame);
+    for (const float side : {-h + 0.06f, h - 0.06f}) {
+        drawBox({side, 1.02f, 0.17f}, {0.12f, 1.80f, 0.12f}, frame);
+        drawBox({side, 0.58f, -0.82f}, {0.12f, 0.92f, 1.80f}, canopy);
+    }
+
+    constexpr int seatCount = 27;
+    constexpr float seatSpacing = 0.52f;
+    static_assert((seatCount - 1) * seatSpacing + 0.65f < 2.0f * h);
+    drawBox({0.0f, 0.30f, -1.08f}, {2.0f * h - 0.62f, 0.33f, 0.36f}, frame);
+    for (int i = 0; i < seatCount; ++i) {
+        const float x = (i - seatCount / 2) * seatSpacing;
+        const bool coach = i == seatCount / 2;
+        const auto color = coach ? coachRed : red;
+        drawBox({x, 0.50f, -0.97f}, {0.45f, 0.12f, 0.48f}, color);
+        const float backHeight = coach ? 0.69f : 0.57f;
+        drawBox({x, 0.53f + backHeight * 0.5f, -1.18f}, {0.45f, backHeight, 0.14f}, color);
+        drawBox({x + 0.245f, 0.65f, -0.98f}, {0.05f, 0.07f, 0.34f}, frame);
+    }
 }
 
 void arc(Mesh& mesh, glm::vec2 center, float radius, float start, float end, int segments) {
@@ -132,9 +197,16 @@ PitchScene makePitch(const StadiumLayout& layout) {
     rectangle(scene.runoff, x, x + endRunoff, -z, z, 0.0f);
     rectangle(scene.runoff, -x, x, -z - layout.sidelineClearance, -z, 0.0f);
     rectangle(scene.runoff, -x, x, z, z + layout.sidelineClearance, 0.0f);
+    for (const float sign : {-1.0f, 1.0f}) {
+        const float center = sign * dugoutOffset;
+        rectangle(scene.runoff, (center - technicalHalfLength - 0.15f) * scale,
+                  (center + technicalHalfLength + 0.15f) * scale,
+                  -z - layout.sidelineClearance - 1.4f * scale, -z - layout.sidelineClearance, 0.0f);
+    }
     auto& marks = scene.markings;
     for (const float side : {-z, z}) alongField(marks, side, -x, x);
     for (const float line : {-x, 0.0f, x}) crossField(marks, line, -z, z);
+    markTechnicalAreas(marks, -z, scale);
 
     constexpr float quarter = glm::half_pi<float>();
     const float radius = 5.9f * scale;
@@ -168,6 +240,14 @@ void drawPitch(const StadiumLayout& layout, const PitchScene& scene) {
     drawMesh(scene.grass[0], {0.15f, 0.44f, 0.19f});
     drawMesh(scene.grass[1], {0.11f, 0.37f, 0.15f});
     drawMesh(scene.markings, white);
+    const float scale = std::min(scene.halfLength / 35.0f, layout.pitch.size.y / 36.0f);
+    const float dugoutZ = -layout.pitch.size.y * 0.5f - layout.sidelineClearance - 1.1f * scale;
+    for (const float sign : {-1.0f, 1.0f}) {
+        const ScopedMatrix dugoutFrame;
+        glTranslatef(sign * dugoutOffset * scale, 0.0f, dugoutZ);
+        glScalef(scale, scale, scale);
+        drawDugout();
+    }
     for (const float sign : {-1.0f, 1.0f}) {
         const ScopedMatrix goalFrame;
         glTranslatef(sign * scene.halfLength, 0.0f, 0.0f);

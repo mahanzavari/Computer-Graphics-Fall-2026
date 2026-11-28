@@ -1,6 +1,7 @@
 #include "Seating.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <utility>
 #include <glm/gtc/constants.hpp>
@@ -8,8 +9,8 @@
 namespace team12 {
 namespace {
 
-constexpr float seatHeight = 0.46f;
-constexpr float fullTurn = glm::two_pi<float>();
+// CityLab measures feedback polygons as triangles, including the four in the strip.
+constexpr int compactSeatVertices = 14;
 
 void registerTread(citylab::Context& ctx, const StadiumLayout& layout,
                    const std::array<glm::vec2, 4>& points, float height) {
@@ -60,24 +61,51 @@ void registerTread(citylab::Context& ctx, const StadiumLayout& layout,
     }
 }
 
-void buildSeat(SeatingBowl& bowl) {
-    auto& seat = bowl.seat;
-    // A wider molded pan and a raked back with a flat shoulder line.
-    addQuad(seat, {-0.29f, -0.035f, 0.25f}, {0.29f, -0.035f, 0.25f},
-            {0.25f, 0.0f, -0.17f}, {-0.25f, 0.0f, -0.17f});
-    addQuad(seat, {-0.25f, 0.0f, -0.17f}, {0.25f, 0.0f, -0.17f},
-            {0.30f, 0.48f, -0.25f}, {-0.30f, 0.48f, -0.25f});
-    addQuad(bowl.seatMount, {-0.085f, -seatHeight, -0.05f}, {0.085f, -seatHeight, -0.05f},
-            {0.07f, -0.01f, 0.02f}, {-0.07f, -0.01f, 0.02f});
+void buildDetailedSeat(Mesh& mesh) {
+    constexpr glm::vec3 frontLeft{-0.18f, -0.01f, 0.20f};
+    constexpr glm::vec3 frontRight{0.18f, -0.01f, 0.20f};
+    constexpr glm::vec3 hingeLeft{-0.22f, 0.0f, -0.15f};
+    constexpr glm::vec3 hingeRight{0.22f, 0.0f, -0.15f};
+    constexpr glm::vec3 topLeft{-0.18f, 0.35f, -0.21f};
+    constexpr glm::vec3 topRight{0.18f, 0.35f, -0.21f};
+    addQuad(mesh, frontLeft, frontRight, hingeRight, hingeLeft);
+    addQuad(mesh, hingeLeft, hingeRight, topRight, topLeft);
+    addQuad(mesh, frontRight, frontLeft, frontLeft - glm::vec3{0.0f, 0.035f, 0.025f},
+            frontRight - glm::vec3{0.0f, 0.035f, 0.025f});
+    addQuad(mesh, topLeft, topRight, {0.16f, 0.33f, -0.24f}, {-0.16f, 0.33f, -0.24f});
+}
+
+void drawSeat(glm::vec3 color, const Mesh& detailedSeat, bool detailed) {
+    glColor3f(palette::steel.r, palette::steel.g, palette::steel.b);
+    glNormal3f(0.0f, 0.0f, 1.0f);
+    glBegin(GL_LINES);
+    glVertex3f(0.0f, -seatHeight, 0.0f);
+    glVertex3f(0.0f, -0.006f, -0.035f);
+    glEnd();
+
+    if (detailed) {
+        drawMesh(detailedSeat, color);
+        return;
+    }
+    glColor3f(color.r, color.g, color.b);
+    glBegin(GL_TRIANGLE_STRIP);
+    glNormal3f(0.0f, 1.0f, 0.03f);
+    glVertex3f(-0.20f, -0.01f, 0.20f);
+    glVertex3f( 0.20f, -0.01f, 0.20f);
+    glVertex3f(-0.22f, 0.0f, -0.15f);
+    glVertex3f( 0.22f, 0.0f, -0.15f);
+    glNormal3f(0.0f, 0.17f, 0.985f);
+    glVertex3f(-0.19f, 0.35f, -0.21f);
+    glVertex3f( 0.19f, 0.35f, -0.21f);
+    glEnd();
 }
 
 void buildRow(SeatingRow& row, const StadiumLayout& layout, const SeatingSection& section,
               int rowIndex, int sector, citylab::Context& ctx) {
     const auto& tier = layout.tiers[section.tier];
-    const glm::vec2 radii = tier.firstRowRadii + glm::vec2{rowIndex * tier.rowDepth};
+    const auto radii = tier.firstRowRadii + glm::vec2{rowIndex * tier.rowDepth};
     const float height = tier.firstRowHeight + rowIndex * tier.risePerRow;
     const float tread = height - seatHeight;
-    const float step = fullTurn / nominalSeatsPerRow;
     const auto center = ovalPoint(radii, (sector + 0.5f) * glm::half_pi<float>());
     const glm::vec3 origin{center.x, height, center.y};
     row.origin = origin - section.origin;
@@ -88,53 +116,44 @@ void buildRow(SeatingRow& row, const StadiumLayout& layout, const SeatingSection
             row.seats.push_back(local);
         }
     }
+
     const auto inner = radii - glm::vec2{tier.rowDepth * 0.5f};
     const auto outer = radii + glm::vec2{tier.rowDepth * 0.5f};
-    const float tunnelZMin = layout.playerTunnel.center.y - layout.playerTunnel.size.y * 0.5f;
-    const float tunnelZMax = layout.playerTunnel.center.y + layout.playerTunnel.size.y * 0.5f;
-    constexpr float tunnelWallAllowance = 0.12f;
-    const float tunnelLow = fullTurn + std::asin((tunnelZMin - tunnelWallAllowance) / inner.y);
-    const float tunnelHigh = fullTurn + std::asin((tunnelZMax + tunnelWallAllowance) / outer.y);
-    const auto aisle = layout.spectatorCorridors[sector];
-    const float aisleHalfWidth = std::min(aisle.size.x, aisle.size.y) * 0.5f;
-    const bool alongX = sector % 2 == 0;
-    const float angleStart = sector * glm::half_pi<float>()
-        + std::asin(aisleHalfWidth / (alongX ? inner.y : inner.x));
-    const float angleEnd = (sector + 1) * glm::half_pi<float>()
-        - std::asin(aisleHalfWidth / (alongX ? inner.x : inner.y));
-    for (std::size_t first = 0; first < row.seats.size();) {
-        std::size_t last = first;
-        // A three-seat span keeps the chord deviation within the tread depth.
-        while (last + 1 < row.seats.size() && last - first < 2 &&
-               row.seats[last + 1].id == row.seats[last].id + 1) {
-            ++last;
+    for (const auto& span : seatingSpans(layout, sector, radii, tier.rowDepth)) {
+        if (span.end <= span.start) continue;
+        const int segments = static_cast<int>(std::ceil((span.end - span.start) / 0.18f));
+        for (int i = 0; i < segments; ++i) {
+            const float a = span.start + (span.end - span.start) * i / segments;
+            const float b = span.start + (span.end - span.start) * (i + 1) / segments;
+            const std::array<glm::vec2, 4> outline{
+                ovalPoint(outer, a), ovalPoint(inner, a), ovalPoint(inner, b), ovalPoint(outer, b)};
+            registerTread(ctx, layout, outline, tread);
+            const auto vertex = [&](int corner, float y) {
+                const auto p = outline[corner];
+                return glm::vec3{p.x, y, p.y} - origin;
+            };
+            addQuad(row.tread, vertex(0, tread), vertex(1, tread), vertex(2, tread), vertex(3, tread));
+            addQuad(row.tread, vertex(1, tread), vertex(1, 0.0f), vertex(2, 0.0f), vertex(2, tread));
+            if (rowIndex == tier.rows - 1) {
+                addQuad(row.tread, vertex(3, tread), vertex(3, 0.0f), vertex(0, 0.0f), vertex(0, tread));
+            }
+            if (i == 0) {
+                addQuad(row.tread, vertex(0, tread), vertex(0, 0.0f), vertex(1, 0.0f), vertex(1, tread));
+            }
+            if (i == segments - 1) {
+                addQuad(row.tread, vertex(2, tread), vertex(2, 0.0f), vertex(3, 0.0f), vertex(3, tread));
+            }
         }
-        const float seatStart = (row.seats[first].id % nominalSeatsPerRow) * step;
-        const float seatEnd = (row.seats[last].id % nominalSeatsPerRow) * step;
-        float a = first == 0 ? angleStart : std::max(angleStart, seatStart - step * 0.5f);
-        float b = last + 1 == row.seats.size() ? angleEnd : std::min(angleEnd, seatEnd + step * 0.5f);
-        if (sector == seatingSectors - 1) {
-            if (seatEnd < tunnelLow) b = std::min(b, tunnelLow);
-            if (seatStart > tunnelHigh) a = std::max(a, tunnelHigh);
-        }
-        const std::array<glm::vec2, 4> outline{
-            ovalPoint(outer, a), ovalPoint(inner, a), ovalPoint(inner, b), ovalPoint(outer, b)};
-        registerTread(ctx, layout, outline, tread);
-        const glm::vec2 rowOffset{origin.x, origin.z};
-        addWedge(row.tread, {outline[0] - rowOffset, outline[1] - rowOffset,
-                             outline[2] - rowOffset, outline[3] - rowOffset},
-                 -height, tread - height);
-        first = last + 1;
     }
 }
-
 // The stair takes one side of the 4 m aisle, leaving a continuous ground-level lane.
 void buildStairs(SeatingBowl& bowl, const StadiumLayout& layout, citylab::Context& ctx) {
-    constexpr float stairOuterEdge = 2.05f;
     constexpr float stairSide = 0.25f;
     constexpr float firstDistance = -1.25f;
     const auto inner = layout.innerSize * 0.5f;
     for (int aisle = 0; aisle < seatingSectors; ++aisle) {
+        const auto corridor = layout.spectatorCorridors[aisle].size;
+        const float stairOuterEdge = std::min(corridor.x, corridor.y) * 0.5f + stairOverlap;
         const float angle = aisle * glm::half_pi<float>();
         const glm::vec2 outward{std::round(std::cos(angle)), std::round(std::sin(angle))};
         const glm::vec2 across{-outward.y, outward.x};
@@ -184,7 +203,7 @@ void buildStairs(SeatingBowl& bowl, const StadiumLayout& layout, citylab::Contex
 
 SeatingBowl makeSeatingBowl(const StadiumLayout& layout, citylab::Context& ctx) {
     SeatingBowl bowl;
-    buildSeat(bowl);
+
     for (int tier = 0; tier < static_cast<int>(layout.tiers.size()); ++tier) {
         for (int sector = 0; sector < seatingSectors; ++sector) {
             const auto center = ovalPoint(layout.tiers[tier].firstRowRadii,
@@ -197,12 +216,28 @@ SeatingBowl makeSeatingBowl(const StadiumLayout& layout, citylab::Context& ctx) 
         }
     }
     buildStairs(bowl, layout, ctx);
+    std::size_t triangles = bowl.stairs.size() + bowl.rails.size();
+    for (const auto& section : bowl.sections) {
+        for (const auto& row : section.rows) triangles += row.tread.size();
+    }
+    const std::size_t compactCost = 3 * triangles + compactSeatVertices * layout.seats.size();
+    assert(compactCost <= vertexBudget::seating);
+    if constexpr (useDetailedSeats) {
+        buildDetailedSeat(bowl.detailedSeat);
+        const std::size_t extraPerSeat = 3 * bowl.detailedSeat.size() - 12;
+        if (compactCost < vertexBudget::seating) {
+            bowl.detailedSeatCount = std::min(layout.seats.size(),
+                (vertexBudget::seating - compactCost) / extraPerSeat);
+        }
+    }
     return bowl;
 }
 
 void drawSeatingBowl(const SeatingBowl& bowl) {
     drawMesh(bowl.stairs, palette::concrete);
     drawMesh(bowl.rails, palette::steel);
+    glPushAttrib(GL_LINE_BIT);
+    glLineWidth(2.0f);
     for (const auto& section : bowl.sections) {
         const ScopedMatrix sectionFrame;
         glTranslatef(section.origin.x, section.origin.y, section.origin.z);
@@ -215,13 +250,15 @@ void drawSeatingBowl(const SeatingBowl& bowl) {
                 const ScopedMatrix seatFrame;
                 glTranslatef(seat.position.x, seat.position.y, seat.position.z);
                 glRotatef(seat.yawDegrees, 0.0f, 1.0f, 0.0f);
-                const int block = (seat.id % nominalSeatsPerRow) / 6;
-                const bool whiteAccent = section.tier == 1 && block % 4 == 1;
-                drawMesh(bowl.seatMount, palette::steel);
-                drawMesh(bowl.seat, whiteAccent ? palette::facadeWhite : glm::vec3{0.69f, 0.045f, 0.12f});
+                constexpr glm::vec3 red{0.70f, 0.035f, 0.09f};
+                constexpr glm::vec3 darkRed{0.48f, 0.025f, 0.07f};
+                const bool whiteBand = seatPattern == SeatPattern::WhiteBands && seat.tier == 1 && seat.row == 1;
+                const auto color = whiteBand ? palette::facadeWhite : (seat.row == 0 ? darkRed : red);
+                drawSeat(color, bowl.detailedSeat, static_cast<std::size_t>(seat.id) < bowl.detailedSeatCount);
             }
         }
     }
+    glPopAttrib();
 }
 
 }  // namespace team12

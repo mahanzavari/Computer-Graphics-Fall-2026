@@ -12,8 +12,8 @@ Plot origin is at ground center. +Y is up, +Z faces the street. The SDK reports 
 | Shell and roof | Stadium origin | Plinth band to y = 4.4. Shell spring y = 20. Roof ridge y = 24, with an 82 × 51 rounded-rectangle opening |
 | Pitch | Stadium (0, 0), yaw 0° | 70 × 36. Goal lines at x = ±35 and sidelines at z = ±18 |
 | Goal and sideline reservations | Stadium-local | 3 m behind each goal line and 10 m wide around z = 0. 2 m runoff beside both sidelines within the ends of the pitch |
-| Lower tier | First row radii (48.65, 30.65) | Three rows at 0.95 radial spacing. Seat surface y = 1.00, 1.45, 1.90. Treads y = 0.54, 0.99, 1.44 |
-| Upper tier | First row radii (52.25, 34.25) | Three rows at 0.95 radial spacing. Seat surface y = 4.00, 4.48, 4.96. Treads y = 3.54, 4.02, 4.50 |
+| Lower tier | First row radii (48.55, 30.55) | Four rows at 0.82 radial spacing. Seat surface y = 1.00, 1.43, 1.86, 2.29. Treads y = 0.58, 1.01, 1.44, 1.87 |
+| Upper tier | First row radii (52.25, 34.25) | Three rows at 0.82 radial spacing. Seat surface y = 4.00, 4.44, 4.88. Treads y = 3.58, 4.02, 4.46 |
 | Spectator portals | Four cardinal points of the outer ellipse | 4.8 m nominal opening width. Main +Z portal 4 m high, others 3.5 m. Interior aisles 4 m wide. Stair runs occupy one side |
 | Player tunnel | Stadium z = -18, plot z = -23 | 3 m wide, 3.2 m high shell opening. Reserved stadium x = 36 to about 49.32. Exterior route continues to plot x = 47 |
 | Player facilities | Plot (59, -23) | 24 × 18. Public +Z approach and west-side player approach |
@@ -25,20 +25,20 @@ The 76 × 44 m pitch proposed in the plan crosses the chosen inner ellipse at it
 
 ## Seat placement and ownership
 
-`Seating.cpp` produces **520** shared placements for eight sections and 24 rows. The nominal slot ID is assigned before filtering four aisles and the tunnel. Each record carries stadium-local seat-surface center, yaw in degrees around +Y, zero-based tier/row/sector, and eligibility. The model's +Z faces the pitch. In `SeatingBowl.cpp`, the seat transform is **Stadium → Seating Section → Row → Seat**. Row-local seat translations reconstruct the exact original placement. The molded seat uses six triangles per instance. Take spectators from the shared vector in init and keep spectator rendering under the same stadium root.
+Four aisle cuts and the player tunnel define the usable ellipse spans for both the concrete treads and the **3,116** shared seat placements. Seat counts come from the measured arc length of each span at 0.55 m nominal spacing. Each record carries a deterministic ID, stadium-local seat-surface center, inward yaw, zero-based tier/row/sector, and occupancy eligibility. Rendering retains the Stadium, Section, Row, and Seat transforms. Spectator rendering can reuse these placements and must cap occupancy using the separate 10,000-vertex allocation.
 
 | Owner | Module | Working cap | Stage vertices |
 | --- | --- | ---: | ---: |
 | Amirabbas | Shell and façade | 14,000 | 13,752 |
 | Amirabbas | Roof, supports, interior banners and their lights | 7,000 | 6,690 |
-| Amirabbas | Seating, stairs and railings | 20,000 | 18,900 |
+| Amirabbas | Seating, stairs and railings | 50,960 | 50,374 |
 | Amirabbas | Grounds and monument | 8,000 | 7,836 |
 | Mahan | Pitch, goals and equipment, including scoreboard | 6,000 | 3,796 |
 | Mahan | Spectators and flags | 10,000 | Pending |
 | Mahan | Player facilities and tunnel | 8,000 | Placeholder |
 | Mahan | Ticket office and fan shop | 7,000 | Placeholder |
 
-Both members share layout, helpers, the entry point, integration, testing, and documentation. The scene totals **51,100** checker-counted vertices, including 108 for the floodlight fixture and 18 from three auxiliary building pads. Filling Mahan's allocations projects **78,286** vertices if these placeholders are replaced. The city limit is 100,000, with an 80,000 working target. There are 314 registered colliders of the SDK's 400-box team allowance. Reserve the remaining 86 for later integration.
+The current stadium uses **89,414** checker-counted vertices and 379 of 400 colliders. The stadium exceeds the 80,000 working target by 9,414 vertices and has 10,586 vertices available under the 100,000 limit. The compact seat submits eight vertices per instance, which CityLab counts as 14 after triangulating the strip. The optional beveled mesh and white-band color pattern are configured in Seating.h. Detailed seats are capped by the remaining bowl budget.
 
 ## Implementation checklist and measured checkpoints
 

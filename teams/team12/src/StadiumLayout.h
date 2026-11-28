@@ -14,7 +14,7 @@ struct Footprint {
 };
 
 struct SeatPlacement {
-    int id;  // Nominal slot ID, independent of excluded corridors.
+    int id;  // Deterministic index in the generated bowl layout.
     glm::vec3 position;  // Stadium-local center of the seat surface, in metres.
     float yawDegrees;  // Local +Z faces the pitch after a rotation about +Y.
     int tier;
@@ -50,7 +50,6 @@ inline constexpr glm::vec3 steel{0.24f, 0.27f, 0.31f};
 namespace vertexBudget {
 inline constexpr int shell = 14000;
 inline constexpr int roof = 7000;
-inline constexpr int seating = 20000;
 inline constexpr int landscape = 8000;
 inline constexpr int pitch = 6000;
 inline constexpr int crowd = 10000;
@@ -58,7 +57,9 @@ inline constexpr int playerFacilities = 8000;
 inline constexpr int commercialBuildings = 7000;
 inline constexpr int target = 80000;
 inline constexpr int limit = 100000;
-static_assert(shell + roof + seating + landscape + pitch + crowd + playerFacilities + commercialBuildings == target);
+// CityLab feedback measurement of the current stadium without the seating bowl.
+inline constexpr int measuredOutsideBowl = 39040;
+inline constexpr int seating = limit - crowd - measuredOutsideBowl;
 static_assert(target < limit);
 }  // namespace vertexBudget
 

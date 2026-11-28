@@ -31,8 +31,8 @@ StadiumLayout makeStadiumLayout(const citylab::PlotInfo& plot) {
     layout.pitchYawDegrees = 0.0f;
     layout.mainEntrance = {0.0f, outerRadii.y};
     layout.tiers = {{
-        {3, 0.95f * scale, 1.0f, 0.45f, innerRadii + glm::vec2{0.65f * scale}},
-        {3, 0.95f * scale, 4.0f, 0.48f, innerRadii + glm::vec2{4.25f * scale}},
+        {4, 0.82f * scale, 1.0f, 0.43f, innerRadii + glm::vec2{0.55f * scale}},
+        {3, 0.82f * scale, 4.0f, 0.44f, innerRadii + glm::vec2{4.25f * scale}},
     }};
 
     const auto rectangle = [](float left, float right, float back, float frontEdge) -> Footprint {
