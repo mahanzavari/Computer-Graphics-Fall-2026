@@ -29,6 +29,12 @@ constexpr BannerGlyph glyphs[] = {
     {'8', {14,17,17,14,17,17,14}}, {'2', {14,17,1,2,4,8,31}},
     {'9', {14,17,17,15,1,1,14}}, {'0', {14,17,17,17,17,17,14}},
     {':', {0,0,4,0,4,0,0}}, {'-', {0,0,0,31,0,0,0}},
+    {'D', {30,17,17,17,17,17,30}}, {'G', {14,17,16,23,17,17,14}},
+    {'H', {17,17,17,31,17,17,17}}, {'K', {17,18,20,24,20,18,17}},
+    {'P', {30,17,17,30,16,16,16}}, {'T', {31,4,4,4,4,4,4}},
+    {'U', {17,17,17,17,17,17,14}}, {'V', {17,17,17,17,17,10,4}},
+    {'W', {17,17,17,21,21,27,17}}, {'Z', {31,1,2,4,8,16,31}},
+    {'1', {4,12,4,4,4,4,14}}, {'@', {10,0,17,17,17,17,14}},
 };
 
 void addWallStrip(Mesh& mesh, glm::vec2 radii, float a, float b, float low, float high) {
@@ -93,6 +99,48 @@ void addScoreboard(StadiumRoof& roof, glm::vec2 outer) {
     addWallText(roof.clockText, screen, 0.0f, "90:00", 11.5f, 0.0105f, 0.35f);
 }
 
+void addSteelMember(Mesh& mesh, glm::vec3 a, glm::vec3 b, float width) {
+    const auto axis = glm::normalize(b - a);
+    const auto side = glm::normalize(glm::cross(axis, glm::vec3{0,1,0})) * width;
+    const auto up = glm::cross(axis, side);
+    const auto offsets = std::array<glm::vec3, 3>{-side - up * 0.55f, side - up * 0.55f, up};
+    addTriangle(mesh, a + offsets[2], a + offsets[1], a + offsets[0]);
+    addTriangle(mesh, b + offsets[0], b + offsets[1], b + offsets[2]);
+    for (int j = 0; j < 3; ++j) {
+        const int k = (j + 1) % 3;
+        addQuad(mesh, a + offsets[j], a + offsets[k], b + offsets[k], b + offsets[j]);
+    }
+}
+
+void addRoofLamps(StadiumRoof& roof, glm::vec3 mount, glm::vec3 target) {
+    const auto forward = glm::normalize(target - mount);
+    const auto side = glm::normalize(glm::cross(glm::vec3{0,1,0}, forward));
+    const auto up = glm::cross(forward, side);
+    const auto center = mount + glm::vec3{0,-0.62f,0};
+    addSteelMember(roof.lampHousings, mount, center - forward * 0.22f + side * 0.12f, 0.075f);
+    const auto vertex = [&](float x, float y, float z) { return center + x * side + y * up + z * forward; };
+    constexpr float w = 1.04f, h = 0.35f, front = 0.12f, back = -0.26f;
+    const std::array<glm::vec3, 4> rim{vertex(-w,-h,front), vertex(w,-h,front),
+                                      vertex(w,h,front), vertex(-w,h,front)};
+    const std::array<glm::vec3, 4> rear{vertex(-w,-h,back), vertex(w,-h,back),
+                                       vertex(w,h,back), vertex(-w,h,back)};
+    const std::array<glm::vec3, 4> recess{vertex(-.99f,-.30f,0), vertex(.99f,-.30f,0),
+                                         vertex(.99f,.30f,0), vertex(-.99f,.30f,0)};
+    addQuad(roof.lampHousings, rear[3], rear[2], rear[1], rear[0]);
+    for (int j = 0; j < 4; ++j) {
+        const int k = (j + 1) % 4;
+        addQuad(roof.lampHousings, rear[j], rear[k], rim[k], rim[j]);
+        addQuad(roof.lampHousings, rim[j], rim[k], recess[k], recess[j]);
+    }
+    addQuad(roof.lampHousings, recess[0], recess[1], recess[2], recess[3]);
+    for (float y : {-0.16f, 0.16f}) {
+        for (float x : {-0.66f, 0.0f, 0.66f}) {
+            addQuad(roof.lampFaces, vertex(x-.29f,y-.125f,.03f), vertex(x+.29f,y-.125f,.03f),
+                    vertex(x+.29f,y+.125f,.03f), vertex(x-.29f,y+.125f,.03f));
+        }
+    }
+}
+
 void enableBannerLight(GLenum light, glm::vec3 position, float intensity) {
     const GLfloat location[]{position.x, position.y, position.z, 1.0f};
     const GLfloat aim[]{0.0f, -0.75f, std::copysign(0.66f, position.z)};
@@ -151,6 +199,13 @@ void drawInteriorSigns(const StadiumRoof& roof, float nightLight) {
 
 }  // namespace
 
+std::array<unsigned, 7> stadiumGlyph(char letter) {
+    for (const auto& glyph : glyphs) {
+        if (glyph.letter == letter) return glyph.rows;
+    }
+    return {};
+}
+
 StadiumRoof makeStadiumRoof(const StadiumLayout& layout) {
     StadiumRoof roof;
     constexpr int segments = 64;
@@ -186,8 +241,14 @@ StadiumRoof makeStadiumRoof(const StadiumLayout& layout) {
     }
 
     constexpr int supportCount = 24;
+    const auto ringPoint = [&](float angle) {
+        const auto p = aperturePoint(opening + glm::vec2{0.90f}, angle);
+        return glm::vec3{p.x, layout.roofHeight - 1.0f, p.y};
+    };
     for (int i = 0; i < supportCount; ++i) {
         const float angle = (i + 0.5f) * fullTurn / supportCount;
+        const auto ring = ringPoint(angle);
+        addSteelMember(roof.roofRing, ring, ringPoint(angle + fullTurn / supportCount), 0.12f);
         const auto column = point(outer - glm::vec2{1.14f}, angle, layout.shellSpringHeight + 0.68f);
         const auto tunnel = layout.playerTunnel;
         if (column.x > tunnel.center.x - tunnel.size.x * 0.5f &&
@@ -200,6 +261,16 @@ StadiumRoof makeStadiumRoof(const StadiumLayout& layout) {
         roof.supports.push_back({column, (column + tip) * 0.5f, glm::length(delta),
             glm::degrees(std::atan2(delta.x, delta.z)),
             -glm::degrees(std::atan2(delta.y, glm::length(glm::vec2{delta.x, delta.z})))});
+        if (i % 2 == 0) {
+            const auto lower = glm::mix(column, tip, 0.51f) - glm::vec3{0,1.45f,0};
+            addSteelMember(roof.trusses, column, lower, 0.11f);
+            addSteelMember(roof.trusses, lower, ring, 0.11f);
+            addSteelMember(roof.trusses, lower, glm::mix(column, tip, 0.34f), 0.085f);
+            addSteelMember(roof.trusses, lower, glm::mix(column, tip, 0.72f), 0.085f);
+        }
+        if (i % 3 == 0) {
+            addRoofLamps(roof, ring, {layout.pitch.center.x, 0, layout.pitch.center.y});
+        }
     }
     roof.canopyHinge = {layout.mainEntrance.x, 4.8f, layout.mainEntrance.y - 0.4f};
     addBanner(roof, outer, glm::half_pi<float>(), "MIA SAN MIA");
@@ -222,6 +293,13 @@ void drawStadiumRoof(const StadiumRoof& roof, float nightLight) {
     drawMesh(roof.membrane, {0.78f, 0.80f, 0.83f});
     drawMesh(roof.liner, {0.88f, 0.91f, 0.93f});
     drawMesh(roof.fascia, palette::steel);
+    drawMesh(roof.trusses, {0.50f, 0.54f, 0.59f});
+    drawMesh(roof.roofRing, palette::steel);
+    drawMesh(roof.lampHousings, {0.16f, 0.18f, 0.22f});
+    glPushAttrib(GL_ENABLE_BIT);
+    glDisable(GL_LIGHTING);
+    drawMesh(roof.lampFaces, {1.0f, 0.95f, 0.80f});
+    glPopAttrib();
     drawInteriorSigns(roof, nightLight);
     for (const auto& support : roof.supports) {
         const auto top = support.columnTop;

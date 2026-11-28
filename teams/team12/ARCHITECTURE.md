@@ -38,7 +38,9 @@ Four aisle cuts and the player tunnel define the usable ellipse spans for both t
 | Mahan | Player facilities and tunnel | 8,000 | Placeholder |
 | Mahan | Ticket office and fan shop | 7,000 | Placeholder |
 
-The current stadium uses **89,414** checker-counted vertices and 379 of 400 colliders. The stadium exceeds the 80,000 working target by 9,414 vertices and has 10,586 vertices available under the 100,000 limit. The compact seat submits eight vertices per instance, which CityLab counts as 14 after triangulating the strip. The optional beveled mesh and white-band color pattern are configured in Seating.h. Detailed seats are capped by the remaining bowl budget.
+The seating revision baseline was **89,414** checker-counted vertices and 379 of 400 colliders. The compact seat submits eight vertices per instance, which CityLab counts as 14 after triangulating the strip. The optional beveled mesh and white-band color pattern are configured in Seating.h. Detailed seats are capped by the remaining bowl budget.
+
+The interior decor revision brings the scene to **97,676** checker-counted vertices with the compact seats. It adds 1,500 for pitchside LEDs, 1,296 for wall ribbons, 1,866 for banners, 1,020 for flags, 960 for roof-mounted lamp assemblies, and 1,728 for steel trusses and the connecting ring. The original 108-vertex visible lamp was replaced by the roof assemblies. CityLab reported the same day and night light counts. The 2,324-vertex margin is shared by future crowd and facility work.
 
 ## Implementation checklist and measured checkpoints
 
